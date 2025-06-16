@@ -1,6 +1,6 @@
-flask
-flask_sqlalchemy
-flask_login
-flask_bcrypt
-flask_wtf
-wtforms
+Flask
+Flask-SQLAlchemy
+Flask-Login
+Flask-WTF
+Flask-Bcrypt
+WTForms

@@ -1,114 +1,167 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <style>
-        body {
-            background-color: #f8f9fa;
-        }
-        .navbar {
-            background-color: #007bff;
-        }
-        .navbar-brand, .nav-link {
-            color: white !important;
-        }
-        .dashboard-container {
-            max-width: 900px;
-            margin: auto;
-            margin-top: 50px;
-            padding: 20px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
-        }
-        .table th {
-            background-color: #007bff;
-            color: white;
-        }
-        .btn-new-ticket {
-            margin-bottom: 15px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Help Desk Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+  <style>
+    body {
+      background-color: #f0f2f5;
+      font-family: 'Inter', sans-serif;
+    }
+    .navbar {
+      background-color: #212529;
+    }
+    .navbar-brand {
+      font-weight: bold;
+      color: #f8f9fa;
+    }
+    .dashboard-card {
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+      padding: 25px;
+      margin-top: 40px;
+    }
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .table th {
+      color: black;
+    }
+    .status-pill, .priority-pill {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85em;
+    }
+    .status-open { background-color: #dc3545; color: white; }
+    .status-in-progress { background-color: #ffc107; color: black; }
+    .status-resolved { background-color: #198754; color: white; }
+    .priority-high { background-color: #dc3545; color: white; }
+    .priority-medium { background-color: #ffcc00; color: black; }
+    .priority-low { background-color: #6c757d; color: white; }
+    .btn-new-ticket {
+      border-radius: 10px;
+      background-color: #198754;
+      color: white;
+    }
+    .btn-new-ticket:hover {
+      background-color: #157347;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+    .navbar-brand {
+    font-size: 1.25rem;
+    color: black;
+    }
+    .dropdown-menu {
+        background-color: #fff;
+        min-width: 180px;
+    }
+    .dropdown-toggle {
+        border-radius: 10px;
+    }
+    .dropdown-item {
+        font-size: 1rem;
+    }
+    .dropdown-item:hover {
+        background-color: #f8f9fa;
+    }
+  </style>
 </head>
 <body>
+{% include "navbar.html" %}
 
-    <!-- Navigation Bar -->
-    <nav class="navbar navbar-expand-lg">
-        <div class="container">
-            <a class="navbar-brand" href="#">IT Help Desk</a>
-            <div class="d-flex">
-                <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
+  <div class="container">
+    <div class="dashboard-card">
+      {% with messages = get_flashed_messages(with_categories=True) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
-        </div>
-    </nav>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
 
-    <div class="container mt-4">
-        <div class="dashboard-container">
-            <h2 class="text-center mb-4">Help Desk Dashboard</h2>
+      <div class="dashboard-header">
+        <h3 class="mb-0">Dashboard</h3>
+        <a href="{{ url_for('new_ticket') }}" class="btn btn-new-ticket">+ New Ticket</a>
+      </div>
 
-            <div class="text-end">
-                <a href="{{ url_for('new_ticket') }}" class="btn btn-primary btn-new-ticket">Create New Ticket</a>
-            </div>
-
-            {% with messages = get_flashed_messages(with_categories=True) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
-                    {% endfor %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Description</th>
+              <th>Priority</th>
+              <th>Status</th>
+              <th>Created</th>
+              {% if current_user.is_admin() %}
+                <th>Submitted By</th>
+              {% endif %}
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ticket in tickets %}
+              <tr>
+                <td>{{ ticket.title }}</td>
+                <td>
+                  {{ ticket.description[:100] }}{% if ticket.description|length > 100 %}...{% endif %}
+                </td>
+                <td>
+                  <span class="priority-pill {% if ticket.priority == 'High' %} priority-high 
+                    {% elif ticket.priority == 'Medium' %} priority-medium 
+                    {% else %} priority-low {% endif %}">
+                    {{ ticket.priority }}
+                  </span>
+                </td>
+                <td>
+                  <span class="status-pill {% if ticket.status == 'Open' %} status-open
+                    {% elif ticket.status == 'In Progress' %} status-in-progress
+                    {% else %} status-resolved {% endif %}">
+                    {{ ticket.status }}
+                  </span>
+                </td>
+                <td>{{ ticket.created_at.strftime('%Y-%m-%d') }}</td>
+                {% if current_user.is_admin() %}
+                  <td>{{ ticket.user.username }}</td>
                 {% endif %}
-            {% endwith %}
-
-            <table class="table table-bordered">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Title</th>
-                        <th>Description</th>
-                        <th>Status</th>
-                        <th>Created</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for ticket in tickets %}
-                    <tr>
-                        <td>{{ ticket.id }}</td>
-                        <td>{{ ticket.title }}</td>
-                        <td>{{ ticket.description }}</td>
-                        <td>
-                            <span class="badge bg-primary">{{ ticket.priority }}</span>
-                        </td>
-                        <td>
-                            {% if ticket.status == 'Open' %}
-                                <span class="badge bg-danger">Open</span>
-                            {% elif ticket.status == 'In Progress' %}
-                                <span class="badge bg-warning">In Progress</span>
-                            {% else %}
-                                <span class="badge bg-success">Resolved</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ ticket.created_at.strftime('%Y-%m-%d') }}</td>
-                        <td>
-                            <a href="{{ url_for('edit_ticket', ticket_id=ticket.id) }}" class="btn btn-sm btn-warning">Edit</a>
-                            <form method="POST" action="{{ url_for('delete_ticket', ticket_id=ticket.id) }}" onsubmit="return confirmDelete();" style="display:inline;">
-                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                <td class="actions">
+                  <a href="{{ url_for('view_ticket', ticket_id=ticket.id) }}" class="btn btn-info btn-sm">View</a>
+                  <a href="{{ url_for('edit_ticket', ticket_id=ticket.id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
+                  <form method="POST" action="{{ url_for('delete_ticket', ticket_id=ticket.id) }}" class="d-inline" onsubmit="return confirmDelete();">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if not tickets %}
+          <div class="alert alert-info" role="alert">
+            No tickets found.
+          </div>
+        {% endif %}
+      </div>
     </div>
+  </div>
 
-    <script>
-        function confirmDelete() {
-            return confirm("Are you sure you want to delete this ticket? This action cannot be undone.");
-        }
-    </script>
+  <script>
+    function confirmDelete() {
+      return confirm("Are you sure you want to delete this ticket?");
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>
 </html>

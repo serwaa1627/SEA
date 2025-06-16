@@ -3,15 +3,17 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
-from wtforms.validators import InputRequired, Length, ValidationError
+from wtforms.validators import InputRequired, Length, ValidationError, DataRequired, EqualTo
 from flask_bcrypt import Bcrypt
+from models import db, User, Ticket 
+import random
 
 app = Flask(__name__)
 bcrypt = Bcrypt(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'thisisasecretkey'
-db = SQLAlchemy(app)
+db.init_app(app)
 
 
 login_manager = LoginManager(app)
@@ -21,22 +23,6 @@ login_manager.login_view = 'login'
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
-
-
-class User(db.Model, UserMixin):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(20), nullable=False, unique=True)
-    password = db.Column(db.String(80), nullable=False)
-
-class Ticket(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    description = db.Column(db.Text, nullable=False)
-    priority = db.Column(db.String(20), default="Medium") # Low, Medium, High, Critical
-
-    status = db.Column(db.String(20), default="Open")  # Open, In Progress, Resolved
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
 
 class RegisterForm(FlaskForm):
     username = StringField(validators=[
@@ -65,11 +51,56 @@ class LoginForm(FlaskForm):
 
     submit = SubmitField('Login')
 
+class ChangePasswordForm(FlaskForm):
+    """Form for updating user passwords securely."""
+    current_password = PasswordField("Current Password", validators=[DataRequired()])
+    new_password = PasswordField("New Password", validators=[DataRequired()])
+    confirm_password = PasswordField("Confirm New Password", validators=[
+        DataRequired(), EqualTo("new_password", message="Passwords must match")
+    ])
+    submit = SubmitField("Update Password")
+
+def bulk_seed():
+    # Creating users
+    if User.query.count() == 0:
+        admin = User(username='admin', password=bcrypt.generate_password_hash('admin123').decode('utf-8'), role='admin')
+        users = [
+                User(
+                    username=f"user{i}",
+                    password=bcrypt.generate_password_hash(f"password{i}"),
+                    role="user"
+                )
+                for i in range(1, 11)
+            ]
+        db.session.bulk_save_objects(users)        
+        db.session.add(admin)
+        db.session.commit()
+
+    users = User.query.all()
+
+    # Creating tickets
+    priorities = ["High", "Medium", "Low"]
+    statuses = ["Open", "In Progress", "Resolved"]
+    tickets = [
+        Ticket(
+            title=f"Sample Ticket {i}",
+            description=f"This is the description for ticket {i}.",
+            priority=random.choice(priorities),
+            status=random.choice(statuses),
+            user_id=random.choice(users).id
+        )
+        for i in range(1, 11)
+    ]
+    db.session.bulk_save_objects(tickets)
+    db.session.commit()
 
 @app.route('/', methods=['GET', 'POST'])
 @login_required
 def dashboard():
-    tickets = Ticket.query.filter_by(user_id=current_user.id).all()
+    if current_user.is_admin():
+        tickets = Ticket.query.filter_by(is_deleted=False).all()
+    else:
+        tickets = Ticket.query.filter_by(user_id=current_user.id, is_deleted=False).all()
     return render_template('dashboard.html', tickets=tickets)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -138,15 +169,17 @@ def new_ticket():
 def edit_ticket(ticket_id):
     ticket = Ticket.query.get_or_404(ticket_id)
 
-    # Ensure only the owner can edit
-    if ticket.user_id != current_user.id:
-        flash('Unauthorized access.', 'danger')
+    # Ensure only the owner or admin can edit
+    if not (current_user.is_admin() or ticket.user_id == current_user.id):
+        flash('Unauthorised access.', 'danger')
         return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
         ticket.title = request.form['title']
         ticket.description = request.form['description']
-        ticket.status = request.form['status']
+        # Only allow admins to update status
+        if current_user.is_admin():
+            ticket.status = request.form.get('status', ticket.status)
 
         db.session.commit()
         flash('Ticket updated successfully!', 'success')
@@ -157,21 +190,47 @@ def edit_ticket(ticket_id):
 @app.route('/delete_ticket/<int:ticket_id>', methods=['POST'])
 @login_required
 def delete_ticket(ticket_id):
+    """Allows users to delete their own tickets and admins to delete any ticket"""
     ticket = Ticket.query.get_or_404(ticket_id)
 
-    if ticket.user_id != current_user.id:
-        flash('Unauthorized access.', 'danger')
-        return redirect(url_for('dashboard'))
+    if current_user.is_admin() or ticket.user_id == current_user.id:
+        ticket.is_deleted = True  # Soft delete so moderation and audits can still take place
+        db.session.commit()
+        flash("Ticket successfully deleted!", "success")
+    else:
+        flash("You do not have permission to delete this ticket.", "danger")
 
-    db.session.delete(ticket)
-    db.session.commit()
-
-    flash('Ticket deleted successfully!', 'success')
     return redirect(url_for('dashboard'))
 
+@app.route('/account_settings', methods=['GET', 'POST'])
+@login_required
+def account_settings():
+    form = ChangePasswordForm()
+    
+    if form.validate_on_submit():
+        if not current_user.check_password(form.current_password.data):
+            flash("Incorrect current password.", "danger")
+            return redirect(url_for("account_settings"))
+
+        current_user.set_password(form.new_password.data)
+        db.session.commit()
+        flash("Password updated successfully.", "success")
+        return redirect(url_for("account_settings"))
+    return render_template("account_settings.html", form=form, user=current_user)
+
+@app.route('/view_ticket/<int:ticket_id>')
+@login_required
+def view_ticket(ticket_id):
+    ticket = Ticket.query.get_or_404(ticket_id)
+    if not (current_user.is_admin() or ticket.user_id == current_user.id):
+        flash('Unauthorised access.', 'danger')
+        return redirect(url_for('dashboard'))
+    return render_template('view_ticket.html', ticket=ticket)
 
 if __name__ == "__main__":
     with app.app_context():
         # db.drop_all()
         db.create_all()
+        if User.query.count() == 0 and Ticket.query.count() == 0:
+            bulk_seed()
     app.run(debug=True)
