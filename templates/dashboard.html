@@ -95,6 +95,28 @@
         <h3 class="mb-0">Dashboard</h3>
         <a href="{{ url_for('new_ticket') }}" class="btn btn-new-ticket">+ New Ticket</a>
       </div>
+      <form method="get" class="row g-3 mb-4">
+  <div class="col-md-3">
+    <select name="status" class="form-select">
+      <option value="">All Statuses</option>
+      <option value="Open" {% if request.args.get('status') == 'Open' %}selected{% endif %}>Open</option>
+      <option value="In Progress" {% if request.args.get('status') == 'In Progress' %}selected{% endif %}>In Progress</option>
+      <option value="Resolved" {% if request.args.get('status') == 'Resolved' %}selected{% endif %}>Resolved</option>
+    </select>
+  </div>
+  <div class="col-md-3">
+    <select name="priority" class="form-select">
+      <option value="">All Priorities</option>
+      <option value="High" {% if request.args.get('priority') == 'High' %}selected{% endif %}>High</option>
+      <option value="Medium" {% if request.args.get('priority') == 'Medium' %}selected{% endif %}>Medium</option>
+      <option value="Low" {% if request.args.get('priority') == 'Low' %}selected{% endif %}>Low</option>
+    </select>
+  </div>
+  <div class="col-md-3">
+    <button type="submit" class="btn btn-primary">Filter</button>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Reset</a>
+  </div>
+</form>
 
       <div class="table-responsive">
         <table class="table table-hover align-middle">

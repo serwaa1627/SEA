@@ -31,6 +31,15 @@ class RegisterForm(FlaskForm):
     password = PasswordField(validators=[
                              InputRequired(), Length(min=8, max=20)], render_kw={"placeholder": "Password"})
 
+    confirm_password = PasswordField(
+            'Confirm Password',
+            validators=[
+                InputRequired(),
+                EqualTo('password', message='Passwords must match')
+            ],
+            render_kw={"placeholder": "Confirm Password"}
+        )
+    
     submit = SubmitField('Register')
 
     def validate_username(self, username):
@@ -97,10 +106,19 @@ def bulk_seed():
 @app.route('/', methods=['GET', 'POST'])
 @login_required
 def dashboard():
-    if current_user.is_admin():
-        tickets = Ticket.query.filter_by(is_deleted=False).all()
-    else:
-        tickets = Ticket.query.filter_by(user_id=current_user.id, is_deleted=False).all()
+    query = Ticket.query.filter_by(is_deleted=False)
+    if not current_user.is_admin():
+        query = query.filter_by(user_id=current_user.id)
+
+    status = request.args.get('status')
+    priority = request.args.get('priority')
+
+    if status:
+        query = query.filter_by(status=status)
+    if priority:
+        query = query.filter_by(priority=priority)
+
+    tickets = query.all()
     return render_template('dashboard.html', tickets=tickets)
 
 @app.route('/login', methods=['GET', 'POST'])
