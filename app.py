@@ -251,4 +251,4 @@ if __name__ == "__main__":
         db.create_all()
         if User.query.count() == 0 and Ticket.query.count() == 0:
             bulk_seed()
-    app.run(debug=True)
+    app.run()
